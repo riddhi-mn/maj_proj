@@ -82,13 +82,25 @@ class Neo4jClient:
     
     def general_search(self, query_terms: List[str]) -> List[Dict]:
         """General search across plants, illnesses, and symptoms."""
+        # Don't search if no terms - prevents returning all plants for unrelated queries
+        if not query_terms or not any(term.strip() for term in query_terms):
+            logger.debug("[Neo4j] General search called with no valid terms - returning empty")
+            return []
+        
         logger.info(f"[Neo4j] General search with terms: {query_terms}")
         query = build_general_search_query(query_terms)
         return self._execute_query(query)
     
     def get_graph_context(self, user_query: str) -> str:
         """Extract graph context from user query to enhance vector search."""
-        logger.info(f"[Neo4j] Getting graph context for query: {user_query}")
+        results = self.get_graph_results(user_query)
+        if results:
+            return format_graph_context(results)
+        return ""
+    
+    def get_graph_results(self, user_query: str) -> List[Dict]:
+        """Extract graph results from user query for citation purposes."""
+        logger.info(f"[Neo4j] Getting graph results for query: {user_query}")
         query_lower = user_query.lower()
         
         # Try to identify key terms (simplified - could use NER in production)
@@ -100,9 +112,8 @@ class Neo4jClient:
             logger.debug("[Neo4j] Detected illness-related query")
             results = self.general_search(terms)
             if results:
-                context = format_graph_context(results)
                 logger.info(f"[Neo4j] Found {len(results)} results via general search (illness)")
-                return context
+                return results
         
         # Check for symptom-related keywords
         if any(keyword in query_lower for keyword in ["symptom", "pain", "headache", "fever", "ache", "cough", "stress", "joint pain", "rash", "fatigue"]):
@@ -110,9 +121,8 @@ class Neo4jClient:
             for term in terms:
                 results = self.search_plants_by_symptom(term.capitalize())
                 if results:
-                    context = format_graph_context(results)
                     logger.info(f"[Neo4j] Found {len(results)} results via symptom search")
-                    return context
+                    return results
         
         # Check for plant-related keywords or try direct plant search
         if any(keyword in query_lower for keyword in ["plant", "herb", "medicine", "medicinal", "what is", "tell me about"]):
@@ -121,36 +131,39 @@ class Neo4jClient:
             for term in terms:
                 result = self.search_plant_by_name(term.capitalize())
                 if result:
-                    context = format_graph_context([result])
                     logger.info(f"[Neo4j] Found plant via name search: {term}")
-                    return context
+                    return [result]
         
         # Check for chemical compound keywords
         if any(keyword in query_lower for keyword in ["compound", "chemical", "contains", "curcumin", "eugenol", "nimbin", "withanolides"]):
             logger.debug("[Neo4j] Detected compound-related query")
             results = self.general_search(terms)
             if results:
-                context = format_graph_context(results)
                 logger.info(f"[Neo4j] Found {len(results)} results via general search (compound)")
-                return context
+                return results
         
         # Check for property keywords
         if any(keyword in query_lower for keyword in ["property", "antimicrobial", "anti-inflammatory", "antioxidant", "adaptogenic", "detoxifying"]):
             logger.debug("[Neo4j] Detected property-related query")
             results = self.general_search(terms)
             if results:
-                context = format_graph_context(results)
                 logger.info(f"[Neo4j] Found {len(results)} results via general search (property)")
-                return context
+                return results
         
-        # Fallback: general search
+        # Early return: if no terms and no relevant keywords detected, don't search
+        # This prevents returning all plants for unrelated queries like "HI" or greetings
+        if not terms:
+            logger.debug(f"[Neo4j] No search terms extracted and no relevant keywords detected - skipping graph search")
+            logger.warning(f"[Neo4j] No graph results found for query: {user_query} (no searchable terms)")
+            return []
+        
+        # Fallback: general search (only if we have terms)
         logger.debug("[Neo4j] Using fallback general search")
         results = self.general_search(terms[:3])  # Limit to first 3 terms
         if results:
-            context = format_graph_context(results)
             logger.info(f"[Neo4j] Found {len(results)} results via fallback search")
-            return context
+            return results
         
-        logger.warning(f"[Neo4j] No graph context found for query: {user_query}")
-        return ""
+        logger.warning(f"[Neo4j] No graph results found for query: {user_query}")
+        return []
 

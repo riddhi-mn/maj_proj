@@ -80,17 +80,21 @@ async function sendMessage() {
         removeLoadingMessage(loadingId);
         
         if (response.ok) {
-            // Add bot response
-            addMessage(data.response, 'bot');
+            // Debug: log sources
+            console.log('Sources received:', data.sources);
             
-            // Show context info if available
-            if (data.graph_context) {
+            // Add bot response with sources
+            addMessage(data.response, 'bot', data.sources);
+            
+            // Show context info if available (but don't override sources status)
+            if (data.graph_context && (!data.sources || data.sources.length === 0)) {
                 updateStatus('✓ Used graph context from Neo4j');
             }
             
+            // Sources are now permanently displayed in message bubble, 
+            // so we don't need to show them in status bar
             if (data.sources && data.sources.length > 0) {
-                const sourcesText = data.sources.map(s => `${s.filename} (page ${s.page})`).join(', ');
-                updateStatus(`✓ Sources: ${sourcesText}`);
+                updateStatus(`✓ Found ${data.sources.length} source(s) - see message below`);
             }
         } else {
             addMessage(`Error: ${data.detail || 'Unknown error occurred'}`, 'bot');
@@ -107,7 +111,7 @@ async function sendMessage() {
 }
 
 // Add message to chat
-function addMessage(text, type) {
+function addMessage(text, type, sources = null) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}-message`;
     
@@ -121,6 +125,54 @@ function addMessage(text, type) {
         pTag.textContent = p;
         contentDiv.appendChild(pTag);
     });
+    
+    // Add sources component for bot messages
+    if (type === 'bot' && sources && sources.length > 0) {
+        console.log('Adding sources to message:', sources);
+        
+        const sourcesDiv = document.createElement('div');
+        sourcesDiv.className = 'message-sources';
+        
+        const sourcesLabel = document.createElement('span');
+        sourcesLabel.className = 'sources-label';
+        sourcesLabel.innerHTML = '<i class="fas fa-book"></i> Sources:';
+        sourcesDiv.appendChild(sourcesLabel);
+        
+        const sourcesList = document.createElement('div');
+        sourcesList.className = 'sources-list';
+        
+        sources.forEach(source => {
+            const sourceItem = document.createElement('span');
+            sourceItem.className = 'source-item';
+            
+            // Handle different source types
+            if (source.type === 'graph') {
+                // Graph citation - show plant name and related info
+                let citationText = source.name || source.source || 'Knowledge Graph';
+                if (source.illnesses && source.illnesses.length > 0) {
+                    citationText += ` (treats: ${source.illnesses.join(', ')})`;
+                } else if (source.symptoms && source.symptoms.length > 0) {
+                    citationText += ` (symptoms: ${source.symptoms.join(', ')})`;
+                }
+                sourceItem.textContent = citationText;
+                sourceItem.title = `From Knowledge Graph: ${source.name}`;
+            } else {
+                // PDF source - show filename and page
+                const pageNum = source.page || source.page_number || '?';
+                sourceItem.textContent = `${source.filename}, page ${pageNum}`;
+                sourceItem.title = `From PDF: ${source.filename}, page ${pageNum}`;
+            }
+            
+            sourcesList.appendChild(sourceItem);
+        });
+        
+        sourcesDiv.appendChild(sourcesList);
+        contentDiv.appendChild(sourcesDiv);
+        
+        console.log('Sources component added to message');
+    } else if (type === 'bot') {
+        console.log('No sources provided or empty sources array');
+    }
     
     messageDiv.appendChild(contentDiv);
     chatMessages.appendChild(messageDiv);

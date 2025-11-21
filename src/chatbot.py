@@ -29,14 +29,43 @@ class HybridRAGChatbot:
         
         # Setup prompt template with single input variable for memory
         self.prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a helpful assistant that answers questions about medicinal plants, 
-            illnesses, symptoms, and treatment methods. You have access to:
+            ("system", """You are a specialized assistant focused on medicinal plants, Ayurveda, Indian herbal medicine, 
+            traditional treatments, and related health topics. Your domain expertise includes:
+            
+            Primary Topics: Medicinal plants, herbal medicine, Ayurveda, Indian traditional medicine, plant-based treatments, 
+            illnesses, symptoms, plant properties, chemical compounds in plants, preparation methods (churna, kwath, etc.), 
+            plant parts (root, leaf, fruit, etc.), regional plant information, soil types, and therapeutic applications.
+            
+            Related Topics (acceptable): General health, biology, botany, chemistry, pharmacology, medical science, 
+            traditional medicine systems, nutrition related to herbal remedies, and basic plant science.
+            
+            Off-Topic (please decline politely): Questions completely unrelated to health, medicine, plants, or biology 
+            (e.g., weather, cooking recipes, movies, sports, programming, current events, etc.). 
+            
+            You have access to:
             1. A structured knowledge graph with plants, illnesses, symptoms, and preparation methods
             2. Detailed PDF documents with comprehensive information
             
-            Use the provided context to answer questions accurately. If the context is empty or doesn't 
-            contain the answer, use your general knowledge but clearly state that you're providing general 
-            information since no specific data is available. Be concise but informative."""),
+            Answer Quality Guidelines:
+            - Synthesize information from all available context (graph + documents) into a coherent, well-structured answer
+            - Write in smooth, flowing paragraphs with clear transitions between ideas
+            - Organize information logically: start with main points, then provide supporting details
+            - Integrate multiple sources seamlessly - don't list them separately unless explicitly asked
+            - Provide comprehensive coverage of the topic using all relevant information from the context
+            - Use natural language and connect ideas smoothly (avoid bullet points unless formatting specific lists)
+            - If multiple aspects are covered, organize them into well-connected sections or paragraphs
+            - When discussing plants, include relevant details: properties, uses, preparation methods, related conditions
+            - Ensure continuity between sentences - each sentence should logically flow from the previous one
+            
+            General Guidelines:
+            - Use the provided context to answer questions accurately within your domain
+            - For related topics (health, biology, chemistry), you may provide general knowledge if context is unavailable
+            - If a question is clearly off-topic (completely unrelated to your domain), politely decline: 
+              "I'm specialized in medicinal plants and herbal medicine. I can help you with questions about plants, 
+              treatments, health conditions, or related topics. Could you rephrase your question within this domain?"
+            - If context is empty but the question is on-topic, use general knowledge and clearly state that you're 
+              providing general information since no specific data is available
+            - Be informative and thorough while maintaining clarity and readability"""),
             MessagesPlaceholder(variable_name="chat_history"),
             ("human", "{input}"),
         ])
@@ -62,16 +91,34 @@ class HybridRAGChatbot:
         # Generate response using LangChain
         response = self.chain.run(input=combined_input)
         
+        # Only include sources if there are actual retrieved chunks (graph or vector)
+        # Don't show citations for empty retrievals (e.g., "HI" or unrelated queries)
+        all_sources = []
+        
+        # Check if we have any actual retrieved content
+        has_graph_results = bool(retrieval_result.get("graph_citations"))
+        has_vector_results = bool(retrieval_result.get("vector_results"))
+        
+        # Only add sources if we have retrieved chunks
+        if has_graph_results or has_vector_results:
+            # Add graph citations
+            if has_graph_results:
+                all_sources.extend(retrieval_result["graph_citations"])
+            
+            # Add PDF sources (limit to top 3)
+            if has_vector_results:
+                top_vector_results = retrieval_result["vector_results"][:3]  # Limit to top 3
+                for r in top_vector_results:
+                    all_sources.append({
+                        "type": "pdf",
+                        "filename": r["filename"],
+                        "page": r["page_number"]
+                    })
+        
         return {
             "response": response,
             "graph_context": retrieval_result["graph_context"],
-            "sources": [
-                {
-                    "filename": r["filename"],
-                    "page": r["page_number"]
-                }
-                for r in retrieval_result["vector_results"]
-            ]
+            "sources": all_sources
         }
     
     def clear_memory(self):
