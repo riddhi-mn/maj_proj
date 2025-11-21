@@ -6,19 +6,21 @@
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-    background: #f5f5f5;
-    background-image: url('/static/images/background.jpeg'); /* Add your image path here */
-    background-size: cover; /* or 'contain' or specific size like '1920px 1080px' */
+    background-image: url('/static/images/background.jpeg');
+    background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
+    background-attachment: fixed;
     height: 100vh;
     overflow: hidden;
+    margin: 0;
+    padding: 0;
 }
 
 .container {
     width: 70%;
     height: 100vh;
-    background: rgb(49, 74, 57);
+    background: transparent;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -26,30 +28,54 @@ body {
 }
 
 header {
-    background: #2b6741;
+    background: transparent;
     color: white;
-    padding: 24px 32px;
-    border-bottom: 1px solid #16a34a;
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.header-content {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.logo-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.logo-symbol {
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.header-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 header h1 {
     font-size: 24px;
     font-weight: 700;
-    margin-bottom: 4px;
     letter-spacing: -0.5px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    margin: 0;
+    line-height: 1.2;
 }
 
-header h1 i {
-    font-size: 26px;
-}
-
-.subtitle {
-    font-size: 14px;
-    opacity: 0.9;
+.tagline {
+    font-size: 13px;
     font-weight: 400;
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    margin: 0;
+    opacity: 0.9;
 }
 
 .chat-container {
@@ -57,22 +83,24 @@ header h1 i {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    height: calc(100vh - 120px);
+    min-height: 0;
 }
 
 .chat-messages {
     flex: 1;
     overflow-y: auto;
-    padding: 32px;
+    padding: 24px 32px;
     display: flex;
     flex-direction: column;
     gap: 16px;
-    background: #293c2a;
+    background: transparent;
 }
+
+/* Remove timestamp pseudo-element if not needed */
 
 .message {
     display: flex;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
     animation: fadeIn 0.3s ease-in;
 }
 
@@ -97,25 +125,30 @@ header h1 i {
 
 .message-content {
     max-width: 70%;
-    padding: 16px 20px;
+    padding: 12px 18px;
     line-height: 1.6;
     font-size: 15px;
+    border-radius: 18px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 .user-message .message-content {
-    background: #618d71;
+    background: rgba(34, 197, 94, 0.25);
     color: white;
     font-weight: 500;
+    border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
 .bot-message .message-content {
-    background: #f0f9f4;
-    color: #1f2937;
-    border: 1px solid #d1fae5;
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .message-content p {
     margin-bottom: 8px;
+    color: inherit;
 }
 
 .message-content p:last-child {
@@ -126,7 +159,7 @@ header h1 i {
 .message-sources {
     margin-top: 16px;
     padding-top: 16px;
-    border-top: 1px solid #d1fae5;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -137,7 +170,7 @@ header h1 i {
 .sources-label {
     font-size: 13px;
     font-weight: 600;
-    color: #16a34a;
+    color: rgba(255, 255, 255, 0.9);
     display: flex;
     align-items: center;
     gap: 6px;
@@ -155,101 +188,127 @@ header h1 i {
 
 .source-item {
     font-size: 12px;
-    color: #6b7280;
-    background: #f0f9f4;
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
     padding: 4px 10px;
-    border: 1px solid #d1fae5;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
     font-weight: 500;
 }
 
 .chat-input-container {
-    padding: 20px 32px;
-    background: rgb(38, 153, 38);
-    border-top: 1px solid #e5e7eb;
+    padding: 16px 32px;
+    background: transparent;
     display: flex;
     gap: 12px;
+    align-items: center;
 }
 
 .chat-input-container input {
     flex: 1;
     padding: 14px 20px;
-    border: 2px solid #e5e7eb;
+    border: none;
+    border-radius: 24px;
     font-size: 15px;
     font-family: 'Inter', sans-serif;
     outline: none;
-    transition: border-color 0.2s;
-    background: #fafafa;
+    transition: all 0.2s;
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.chat-input-container input::placeholder {
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .chat-input-container input:focus {
-    border-color: #22c55e;
-    background: white;
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.4);
 }
 
 .chat-input-container button {
-    padding: 14px 28px;
-    background: #22c55e;
-    color: white;
-    border: none;
-    font-size: 15px;
-    font-weight: 600;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    font-size: 16px;
     font-family: 'Inter', sans-serif;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: all 0.2s;
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: center;
 }
 
 .chat-input-container button:hover {
-    background: #16a34a;
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.05);
 }
 
 .chat-input-container button:active {
-    background: #15803d;
+    transform: scale(0.95);
 }
 
-.chat-input-container button#clearButton {
-    background: #6b7280;
-}
-
-.chat-input-container button#clearButton:hover {
-    background: #4b5563;
+.chat-input-container button i {
+    margin: 0;
 }
 
 .actions {
-    padding: 16px 32px;
-    background: #fafafa;
-    border-top: 1px solid #e5e7eb;
+    padding: 12px 32px;
+    background: transparent;
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
+    gap: 12px;
 }
 
 .actions button {
     padding: 10px 20px;
-    background: #22c55e;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     color: white;
-    border: none;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 500;
     font-family: 'Inter', sans-serif;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: all 0.2s;
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
 .actions button:hover {
-    background: #16a34a;
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px);
+}
+
+.actions button.icon-button {
+    padding: 10px;
+    width: auto;
+    border-radius: 50%;
+    min-width: 40px;
+    justify-content: center;
 }
 
 #status {
     font-size: 13px;
-    color: #6b7280;
+    color: rgba(255, 255, 255, 0.8);
     font-style: italic;
     font-weight: 400;
+    margin-left: auto;
 }
 
 /* Scrollbar styling */
@@ -258,15 +317,16 @@ header h1 i {
 }
 
 .chat-messages::-webkit-scrollbar-track {
-    background: #f5f5f5;
+    background: transparent;
 }
 
 .chat-messages::-webkit-scrollbar-thumb {
-    background: #d1d5db;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
 }
 
 .chat-messages::-webkit-scrollbar-thumb:hover {
-    background: #9ca3af;
+    background: rgba(255, 255, 255, 0.5);
 }
 
 /* Loading indicator */
@@ -274,8 +334,9 @@ header h1 i {
     display: inline-block;
     width: 16px;
     height: 16px;
-    border: 2px solid #d1fae5;
-    border-top: 2px solid #22c55e;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top: 2px solid rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
     animation: spin 1s linear infinite;
 }
 

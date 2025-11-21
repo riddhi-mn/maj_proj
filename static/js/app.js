@@ -1,5 +1,24 @@
 const API_BASE = '/api';
 
+// Generate or retrieve session ID
+function getSessionId() {
+    let sessionId = localStorage.getItem('chatbot_session_id');
+    if (!sessionId) {
+        sessionId = generateUUID();
+        localStorage.setItem('chatbot_session_id', sessionId);
+    }
+    return sessionId;
+}
+
+// Generate UUID for session ID
+function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
 const chatMessages = document.getElementById('chatMessages');
 const messageInput = document.getElementById('messageInput');
 const sendButton = document.getElementById('sendButton');
@@ -18,7 +37,7 @@ messageInput.addEventListener('keypress', (e) => {
 });
 
 // Clear chat history
-clearButton.addEventListener('click', () => {
+clearButton.addEventListener('click', async () => {
     chatMessages.innerHTML = `
         <div class="message bot-message">
             <div class="message-content">
@@ -26,25 +45,85 @@ clearButton.addEventListener('click', () => {
             </div>
         </div>
     `;
-    fetch(`${API_BASE}/clear`, { method: 'POST' })
-        .then(() => updateStatus('Chat history cleared'));
-});
-
-// Ingest PDFs
-ingestButton.addEventListener('click', async () => {
-    ingestButton.disabled = true;
-    updateStatus('Ingesting PDFs...');
     
     try {
-        const response = await fetch(`${API_BASE}/ingest`, { method: 'POST' });
+        const sessionId = getSessionId();
+        const response = await fetch(`${API_BASE}/clear`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ session_id: sessionId })
+        });
+        const data = await response.json();
+        updateStatus(data.message || 'Chat history cleared');
+    } catch (error) {
+        updateStatus(`✗ Error: ${error.message}`);
+    }
+});
+
+// File input element
+const fileInput = document.getElementById('fileInput');
+const fileCount = document.getElementById('fileCount');
+
+// Ingest PDFs - trigger file picker
+ingestButton.addEventListener('click', () => {
+    fileInput.click();
+});
+
+// Handle file selection
+fileInput.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files);
+    
+    if (files.length === 0) {
+        return;
+    }
+    
+    // Validate files - only PDFs
+    const invalidFiles = files.filter(file => !file.name.toLowerCase().endsWith('.pdf'));
+    if (invalidFiles.length > 0) {
+        updateStatus(`✗ Error: Only PDF files are allowed. Found ${invalidFiles.length} invalid file(s)`);
+        fileInput.value = ''; // Reset file input
+        fileCount.style.display = 'none';
+        return;
+    }
+    
+    // Show file count
+    if (files.length > 0) {
+        fileCount.textContent = `${files.length} file(s) selected`;
+        fileCount.style.display = 'inline';
+    }
+    
+    // Upload and ingest
+    ingestButton.disabled = true;
+    updateStatus('Uploading and processing PDFs...');
+    
+    try {
+        // Create FormData and append all files
+        const formData = new FormData();
+        files.forEach((file, index) => {
+            formData.append('files', file);
+        });
+        
+        // Upload files
+        const response = await fetch(`${API_BASE}/ingest`, {
+            method: 'POST',
+            body: formData
+            // Don't set Content-Type header - let browser set it with boundary for multipart/form-data
+        });
+        
         const data = await response.json();
         
         if (response.ok) {
-            updateStatus(`✓ ${data.message} - ${data.chunks_processed} chunks processed`);
+            updateStatus(`✓ ${data.message} - ${data.chunks_processed} chunks processed from ${data.files_processed} file(s)`);
+            fileInput.value = ''; // Reset file input
+            fileCount.style.display = 'none';
         } else {
-            updateStatus(`✗ Error: ${data.detail || 'Unknown error'}`);
+            console.error('Upload error:', data);
+            updateStatus(`✗ Error: ${data.detail || data.message || 'Unknown error'}`);
         }
     } catch (error) {
+        console.error('Upload exception:', error);
         updateStatus(`✗ Error: ${error.message}`);
     } finally {
         ingestButton.disabled = false;
@@ -66,12 +145,16 @@ async function sendMessage() {
     const loadingId = addLoadingMessage();
     
     try {
+        const sessionId = getSessionId();
         const response = await fetch(`${API_BASE}/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ message }),
+            body: JSON.stringify({ 
+                message: message,
+                session_id: sessionId
+            }),
         });
         
         const data = await response.json();

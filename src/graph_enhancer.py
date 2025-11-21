@@ -319,24 +319,33 @@ class GraphEnhancer:
         logger.debug("[GraphEnhancer] Formatting context for LLM...")
         context_parts = []
         
-        # Add graph context if available
+        # Add graph context if available (truncate if too long)
         if retrieval_result["graph_context"]:
+            graph_context = retrieval_result["graph_context"]
+            # Limit graph context to 1500 chars to prevent token overflow
+            if len(graph_context) > 1500:
+                graph_context = graph_context[:1500] + "..."
+                logger.debug(f"[GraphEnhancer] Truncated graph context from {len(retrieval_result['graph_context'])} to {len(graph_context)} chars")
             context_parts.append("Graph Context (from knowledge base):")
-            context_parts.append(retrieval_result["graph_context"])
+            context_parts.append(graph_context)
             context_parts.append("")
-            logger.debug(f"[GraphEnhancer] Added graph context ({len(retrieval_result['graph_context'])} chars)")
+            logger.debug(f"[GraphEnhancer] Added graph context ({len(graph_context)} chars)")
         
-        # Add vector search results (limit to top 3 for consistency with citations)
+        # Add vector search results (limit to top 2 and truncate each chunk to prevent token overflow)
         if retrieval_result["vector_results"]:
-            top_vector_results = retrieval_result["vector_results"][:3]  # Limit to top 3
+            top_vector_results = retrieval_result["vector_results"][:2]  # Limit to top 2 (reduced from 3)
             context_parts.append("Document Context (from PDFs):")
             context_parts.append("Use the following document excerpts to provide detailed information. Synthesize this content with the graph context above for a comprehensive answer.")
             context_parts.append("")
             for i, result in enumerate(top_vector_results, 1):
+                content = result.get("content", "")
+                # Truncate each chunk to 500 chars to prevent token overflow
+                if len(content) > 500:
+                    content = content[:500] + "..."
                 context_parts.append(f"[Source {i}: {result['filename']}, Page {result['page_number']}]")
-                context_parts.append(result["content"])
+                context_parts.append(content)
                 context_parts.append("")
-            logger.debug(f"[GraphEnhancer] Added {len(top_vector_results)} document chunks (limited to top 3)")
+            logger.debug(f"[GraphEnhancer] Added {len(top_vector_results)} document chunks (limited to top 2, max 500 chars each)")
         
         # If no context available, indicate this to the LLM
         if not context_parts:

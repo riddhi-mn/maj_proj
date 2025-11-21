@@ -95,7 +95,9 @@ class Neo4jClient:
         """Extract graph context from user query to enhance vector search."""
         results = self.get_graph_results(user_query)
         if results:
-            return format_graph_context(results)
+            # Limit to top 4 results to prevent token overflow (reduced from TOP_K_NEO4J which is 10)
+            limited_results = results[:4]
+            return format_graph_context(limited_results)
         return ""
     
     def get_graph_results(self, user_query: str) -> List[Dict]:

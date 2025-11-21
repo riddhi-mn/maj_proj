@@ -13,16 +13,22 @@
 <body>
     <div class="container">
         <header>
-            <h1><i class="fa-solid fa-staff-snake"></i>JeevaVeda</h1>
-            <p class="subtitle">Hybrid RAG-powered Chatbot for Indian Medicinal Plants</p>
+            <div class="header-content">
+                <div class="logo-container">
+                    
+                </div>
+                <div class="header-text">
+                    <h1><i class="fa-solid fa-staff-snake"></i>  JeevaVeda</h1>
+                    <p class="tagline">Hybrid RAG-powered Chatbot for Indian Medicinal Plants</p>
+                </div>
+            </div>
         </header>
 
         <div class="chat-container">
             <div class="chat-messages" id="chatMessages">
                 <div class="message bot-message">
                     <div class="message-content">
-                        <p>Hello! I'm your hybrid RAG chatbot. I can answer questions about medicinal plants, illnesses, symptoms, and treatments using both structured knowledge graphs and PDF documents.</p>
-                        <p>Ask me anything about plants, treatments, or health!</p>
+                        <p>Hello, how can I help with Ayurvedic plants today?</p>
                     </div>
                 </div>
             </div>
@@ -31,15 +37,17 @@
                 <input 
                     type="text" 
                     id="messageInput" 
-                    placeholder="Type your message here..." 
+                    placeholder="Ask about a plant..." 
                     autocomplete="off"
                 >
-                <button id="sendButton"><i class="fas fa-paper-plane"></i> Send</button>
-                <button id="clearButton"><i class="fas fa-trash"></i> Clear</button>
+                <button id="sendButton"><i class="fas fa-paper-plane"></i></button>
             </div>
 
             <div class="actions">
-                <button id="ingestButton"><i class="fas fa-file-upload"></i> Ingest PDFs</button>
+                <input type="file" id="fileInput" multiple accept=".pdf" style="display: none;">
+                <button id="ingestButton"><i class="fas fa-file-upload"></i> Upload & Ingest PDFs</button>
+                <button id="clearButton" class="icon-button"><i class="fas fa-trash"></i></button>
+                <span id="fileCount" style="display: none; margin-left: 10px; color: rgba(255, 255, 255, 0.9); font-size: 0.9em;"></span>
                 <span id="status"></span>
             </div>
         </div>
