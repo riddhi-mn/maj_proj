@@ -39,7 +39,8 @@ def run_baseline_evaluation(questions: List[Dict]) -> List[Dict]:
                 question,
                 answer_result["response"],
                 answer_result["sources"],
-                answer_result["retrieval_used"]
+                answer_result["retrieval_used"],
+                ranked_vector_chunks=None  # Baseline has no retrieval
             )
             
             result = {
@@ -54,6 +55,13 @@ def run_baseline_evaluation(questions: List[Dict]) -> List[Dict]:
             logger.info(f"  ✓ Answer length: {metrics['answer_length']} words")
             logger.info(f"  ✓ Keyword score: {metrics['keyword_score']:.2f}")
             logger.info(f"  ✓ Plant mention score: {metrics['plant_mention_score']:.2f}")
+            
+            # Log ranking metrics if available
+            if metrics.get("ranking"):
+                ranking = metrics["ranking"]
+                logger.info(f"  ✓ MRR: {ranking.get('mrr', 0):.3f}")
+                logger.info(f"  ✓ NDCG@10: {ranking.get('ndcg', 0):.3f}")
+                logger.info(f"  ✓ Relevant chunks: {ranking.get('num_relevant_chunks', 0)}/{ranking.get('total_chunks', 0)}")
             
         except Exception as e:
             logger.error(f"  ✗ Error: {str(e)}")
@@ -88,11 +96,14 @@ def run_rag_evaluation(questions: List[Dict]) -> List[Dict]:
         
         try:
             answer_result = rag_evaluator.answer(question["question"])
+            # Get ranked vector chunks for MRR/NDCG calculation
+            ranked_vector_chunks = answer_result.get("ranked_vector_chunks", [])
             metrics = calculate_comprehensive_metrics(
                 question,
                 answer_result["response"],
                 answer_result["sources"],
-                answer_result["retrieval_used"]
+                answer_result["retrieval_used"],
+                ranked_vector_chunks=ranked_vector_chunks
             )
             
             result = {
@@ -108,6 +119,13 @@ def run_rag_evaluation(questions: List[Dict]) -> List[Dict]:
             logger.info(f"  ✓ Answer length: {metrics['answer_length']} words")
             logger.info(f"  ✓ Keyword score: {metrics['keyword_score']:.3f} ({metrics['keyword_score']*100:.1f}%)")
             logger.info(f"  ✓ Plant mention score: {metrics['plant_mention_score']:.3f} ({metrics['plant_mention_score']*100:.1f}%)")
+            
+            # Log ranking metrics if available (RAG only)
+            if metrics.get("ranking"):
+                ranking = metrics["ranking"]
+                logger.info(f"  ✓ MRR: {ranking.get('mrr', 0):.3f}")
+                logger.info(f"  ✓ NDCG@10: {ranking.get('ndcg', 0):.3f}")
+                logger.info(f"  ✓ Relevant chunks: {ranking.get('num_relevant_chunks', 0)}/{ranking.get('total_chunks', 0)}")
             if metrics.get("retrieval"):
                 logger.info(f"  ✓ Graph citations: {metrics['retrieval']['num_graph_citations']}")
                 logger.info(f"  ✓ Vector citations: {metrics['retrieval']['num_vector_citations']}")
@@ -207,6 +225,10 @@ def print_comparison(baseline_results: List[Dict], rag_results: List[Dict]):
         logger.info("")
         logger.info(f"{'Graph Citation Match Rate':<50} {rag_agg.get('graph_citation_match_rate', 0):<25.3f}")
         logger.info(f"{'Vector Citation Match Rate':<50} {rag_agg.get('vector_citation_match_rate', 0):<25.3f}")
+        logger.info("")
+        logger.info(f"{'Mean Reciprocal Rank (MRR)':<50} {rag_agg.get('avg_mrr', 0):<25.3f}")
+        logger.info(f"{'NDCG@10 (Normalized Discounted Cumulative Gain)':<50} {rag_agg.get('avg_ndcg', 0):<25.3f}")
+        logger.info(f"{'Avg Relevant Chunks Found':<50} {rag_agg.get('avg_relevant_chunks', 0):<25.2f}")
     
     # Summary statistics
     logger.info("\n" + "─" * 80)

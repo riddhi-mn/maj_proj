@@ -177,12 +177,26 @@ class HybridRAGChatbot:
         graph_citations = retrieval_result.get("graph_citations", [])
         vector_results = retrieval_result.get("vector_results", [])
         
-        # Only consider vector results with meaningful relevance scores (> 0.1)
-        # This filters out low-relevance matches for generic queries like "hi", "hello"
-        meaningful_vector_results = [
-            r for r in vector_results 
-            if r.get("score", 0.0) > 0.1  # Minimum relevance threshold
-        ]
+        # Filter vector results using hybrid_score (if available) or base score
+        # Lower threshold to 0.01 to capture more results, but still filter completely irrelevant ones
+        # Hybrid scores are normalized 0-1, so threshold of 0.01 is reasonable
+        meaningful_vector_results = []
+        for r in vector_results:
+            # Prefer hybrid_score (from reranking), fallback to base score
+            relevance_score = r.get("hybrid_score", r.get("_scoring", {}).get("hybrid_score", r.get("score", 0.0)))
+            if relevance_score > 0.01:  # Lower threshold from 0.1 to 0.01
+                meaningful_vector_results.append(r)
+        
+        # If we still have no results but there are vector_results, take top 3 anyway
+        # (this handles cases where scores are very low but still valid)
+        if not meaningful_vector_results and vector_results:
+            # Sort by hybrid_score or score
+            sorted_results = sorted(
+                vector_results,
+                key=lambda x: x.get("hybrid_score", x.get("_scoring", {}).get("hybrid_score", x.get("score", 0.0))),
+                reverse=True
+            )
+            meaningful_vector_results = sorted_results[:3]
         
         has_graph_results = bool(graph_citations) and len(graph_citations) > 0
         has_vector_results = bool(meaningful_vector_results) and len(meaningful_vector_results) > 0

@@ -1,0 +1,108 @@
+NEO4J SCHEMA TABLE
+================================================================================
+
+NODE TYPES
+================================================================================
+Node Label              | Description                           | Properties
+------------------------|---------------------------------------|------------------
+Plant                   | Medicinal plant entity                | id, name
+LocalName               | Local/common names of plants          | id, name
+BiologicalName          | Scientific/botanical names            | id, name
+PlantPart               | Parts of plant used (root, leaf, etc.)| id, name
+Region                  | Geographic regions where plant grows  | id, name
+SoilType                | Soil types suitable for plant         | id, name
+Preparation             | Preparation methods (churna, kwath)   | id, name
+ChemicalCompound        | Bioactive compounds in plants         | id, name
+ConstituentClass        | Class/category of compounds           | id, name
+CuringProperty          | Healing/medicinal properties          | id, name
+Symptom                 | Symptoms/conditions                   | id, name
+Illness                 | Diseases/health conditions            | id, name
+BodySystem              | Body systems (nervous, respiratory)   | id, name
+BodyParts               | Specific body parts                   | id, name
+
+
+RELATIONSHIPS
+================================================================================
+From Node            | Relationship Type        | To Node                | Direction
+---------------------|--------------------------|------------------------|------------
+Plant                | HAS_LOCAL_NAME          | LocalName              | → (outgoing)
+Plant                | HAS_BIOLOGICAL_NAME     | BiologicalName         | → (outgoing)
+Plant                | HAS_USEFUL_PART         | PlantPart              | → (outgoing)
+Plant                | NATIVE_TO               | Region                 | → (outgoing)
+Plant                | THRIVES_IN              | SoilType               | → (outgoing)
+Plant                | PREPARED_AS             | Preparation            | → (outgoing)
+Plant                | CONTAINS_COMPOUND       | ChemicalCompound       | → (outgoing)
+Plant                | HAS_HEALING_PROPERTY    | CuringProperty         | → (outgoing)
+Plant                | TREATS_ILLNESS          | Illness                | → (outgoing)
+ChemicalCompound     | BELONGS_TO_CLASS        | ConstituentClass       | → (outgoing)
+ChemicalCompound     | EXHIBITS_PROPERTY       | CuringProperty         | → (outgoing)
+CuringProperty       | HELPS_WITH              | Illness                | → (outgoing)
+CuringProperty       | ALLEVIATES_SYMPTOM      | Symptom                | → (outgoing)
+Illness              | HAS_SYMPTOM             | Symptom                | → (outgoing)
+Symptom              | AFFECTS_SYSTEM          | BodySystem             | → (outgoing)
+Illness              | AFFECTS_BODY_SYSTEM     | BodySystem             | → (outgoing)
+BodySystem           | COMPRISES_PART          | BodyParts              | → (outgoing)
+
+
+REVERSE RELATIONSHIPS (Bidirectional)
+================================================================================
+From Node            | Relationship Type        | To Node                | Notes
+---------------------|--------------------------|------------------------|------------------
+LocalName            | IS_LOCAL_NAME_OF        | Plant                  | Reverse of HAS_LOCAL_NAME
+BiologicalName       | IS_BIOLOGICAL_NAME_OF   | Plant                  | Reverse of HAS_BIOLOGICAL_NAME
+PlantPart            | IS_USEFUL_PART_OF       | Plant                  | Reverse of HAS_USEFUL_PART
+Region               | IS_HABITAT_FOR          | Plant                  | Reverse of NATIVE_TO
+SoilType             | SUPPORTS_PLANT          | Plant                  | Reverse of THRIVES_IN
+Preparation          | IS_PREPARATION_OF       | Plant                  | Reverse of PREPARED_AS
+ChemicalCompound     | FOUND_IN_PLANT          | Plant                  | Reverse of CONTAINS_COMPOUND
+CuringProperty       | IS_PROPERTY_OF_PLANT    | Plant                  | Reverse of HAS_HEALING_PROPERTY
+Illness              | TREATED_BY_PLANT        | Plant                  | Reverse of TREATS_ILLNESS
+ConstituentClass     | INCLUDES_COMPOUND       | ChemicalCompound       | Reverse of BELONGS_TO_CLASS
+CuringProperty       | DERIVED_FROM_COMPOUND   | ChemicalCompound       | Reverse of EXHIBITS_PROPERTY
+Illness              | IS_HELPED_BY            | CuringProperty         | Reverse of HELPS_WITH
+Symptom              | ALLEVIATED_BY_PROPERTY  | CuringProperty         | Reverse of ALLEVIATES_SYMPTOM
+Symptom              | IS_SYMPTOM_OF           | Illness                | Reverse of HAS_SYMPTOM
+BodySystem           | AFFECTED_BY_SYMPTOM     | Symptom                | Reverse of AFFECTS_SYSTEM
+BodySystem           | VULNERABLE_TO           | Illness                | Reverse of AFFECTS_BODY_SYSTEM
+BodyParts            | PART_OF_SYSTEM          | BodySystem             | Reverse of COMPRISES_PART
+
+
+SCHEMA OVERVIEW
+================================================================================
+Central Node:        Plant (main entity)
+
+Level 1 (Direct Plant Attributes):
+  - LocalName, BiologicalName, PlantPart, Region, SoilType, Preparation
+
+Level 2 (Chemical & Properties):
+  - ChemicalCompound → ConstituentClass
+  - ChemicalCompound → CuringProperty
+  - Plant → CuringProperty
+
+Level 3 (Medical Applications):
+  - Plant → Illness
+  - CuringProperty → Illness
+  - CuringProperty → Symptom
+  - Illness → Symptom
+  - Symptom → BodySystem
+  - Illness → BodySystem
+  - BodySystem → BodyParts
+
+
+KEY RELATIONSHIP PATHS
+================================================================================
+Query Pattern 1: Plant → Illness
+  Plant -[:TREATS_ILLNESS]-> Illness
+
+Query Pattern 2: Plant → Compound → Property → Symptom
+  Plant -[:CONTAINS_COMPOUND]-> ChemicalCompound -[:EXHIBITS_PROPERTY]-> 
+  CuringProperty -[:ALLEVIATES_SYMPTOM]-> Symptom
+
+Query Pattern 3: Plant → Property → Illness
+  Plant -[:HAS_HEALING_PROPERTY]-> CuringProperty -[:HELPS_WITH]-> Illness
+
+Query Pattern 4: Symptom → System
+  Symptom -[:AFFECTS_SYSTEM]-> BodySystem
+
+================================================================================
+

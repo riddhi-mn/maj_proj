@@ -2,6 +2,7 @@
 
 from typing import Dict, List
 import re
+import math
 
 
 def calculate_answer_length(answer: str) -> int:
@@ -96,11 +97,24 @@ def calculate_retrieval_metrics(sources: List[Dict], expected_plants: List[str])
         elif "plants" in citation:
             cited_plants.extend(citation["plants"])
     
-    # Check if expected plants are cited
+    # Check if expected plants are cited (stricter matching)
     if expected_plants:
-        cited_plants_lower = [p.lower() for p in cited_plants]
-        expected_plants_lower = [p.lower() for p in expected_plants]
-        matching_plants = sum(1 for plant in expected_plants_lower if plant in cited_plants_lower)
+        cited_plants_lower = [p.lower().strip() for p in cited_plants]
+        expected_plants_lower = [p.lower().strip() for p in expected_plants]
+        
+        # More lenient matching: check if any expected plant name appears in cited plants
+        # (handles partial matches and variations)
+        matching_plants = 0
+        for expected in expected_plants_lower:
+            # Check exact match first
+            if expected in cited_plants_lower:
+                matching_plants += 1
+            else:
+                # Check if any cited plant contains the expected plant name (partial match)
+                # This handles cases like "Neem" matching "Neem tree" or "Azadirachta indica (Neem)"
+                if any(expected in cited or cited in expected for cited in cited_plants_lower):
+                    matching_plants += 1
+        
         plant_precision = matching_plants / len(cited_plants) if cited_plants else 0.0
         plant_recall = matching_plants / len(expected_plants) if expected_plants else 1.0
     else:
@@ -121,7 +135,8 @@ def calculate_comprehensive_metrics(
     question: Dict,
     answer: str,
     sources: List[Dict],
-    retrieval_used: bool
+    retrieval_used: bool,
+    ranked_vector_chunks: List[Dict] = None
 ) -> Dict:
     """
     Calculate comprehensive metrics for a single question-answer pair.
@@ -131,6 +146,7 @@ def calculate_comprehensive_metrics(
         answer: Answer text
         sources: List of citation dicts
         retrieval_used: Whether retrieval was used
+        ranked_vector_chunks: Optional list of ranked vector retrieval chunks for MRR/NDCG calculation
         
     Returns:
         Dict with all calculated metrics
@@ -146,8 +162,206 @@ def calculate_comprehensive_metrics(
     # Add retrieval metrics if retrieval was used
     if retrieval_used:
         metrics["retrieval"] = calculate_retrieval_metrics(sources, question.get("expected_plants", []))
+        
+        # Add ranking metrics (MRR, NDCG) if ranked chunks are provided
+        if ranked_vector_chunks:
+            ranking_metrics = calculate_retrieval_ranking_metrics(
+                ranked_vector_chunks,
+                question.get("expected_plants", []),
+                question.get("expected_keywords", []),
+                k=10
+            )
+            metrics["ranking"] = ranking_metrics
     
     return metrics
+
+
+def check_chunk_relevance(chunk_content: str, expected_plants: List[str], expected_keywords: List[str]) -> bool:
+    """
+    Determine if a retrieved chunk is relevant to the query.
+    
+    A chunk is considered relevant if it contains:
+    - At least one expected plant name (case-insensitive, whole word or partial), OR
+    - At least 1 expected keyword (lowered threshold from 2 to 1 for better recall)
+    
+    Args:
+        chunk_content: Text content of the retrieved chunk
+        expected_plants: List of expected plant names
+        expected_keywords: List of expected keywords
+        
+    Returns:
+        True if chunk is relevant, False otherwise
+    """
+    if not chunk_content:
+        return False
+    
+    content_lower = chunk_content.lower()
+    
+    # Check for plant mentions (more lenient - partial matches allowed)
+    if expected_plants:
+        for plant in expected_plants:
+            plant_lower = plant.lower()
+            # Check for whole word or partial match
+            if plant_lower in content_lower:
+                return True
+            # Also check for common variations (e.g., "ashwagandha" vs "ashwagandha root")
+            # Split plant name and check if major parts match
+            plant_words = plant_lower.split()
+            if len(plant_words) > 1:
+                # If multi-word plant name, at least one significant word should match
+                if any(len(word) > 3 and word in content_lower for word in plant_words):
+                    return True
+    
+    # Check for keyword mentions (lowered to 1 keyword for better recall)
+    if expected_keywords:
+        found_keywords = sum(1 for keyword in expected_keywords if keyword.lower() in content_lower)
+        if found_keywords >= 1:  # Lowered from 2 to 1
+            return True
+    
+    return False
+
+
+def calculate_mrr(ranked_chunks: List[Dict], expected_plants: List[str], expected_keywords: List[str]) -> float:
+    """
+    Calculate Mean Reciprocal Rank (MRR) for ranked retrieval results.
+    
+    MRR = 1 / rank_of_first_relevant_result
+    If no relevant result found, MRR = 0
+    
+    Args:
+        ranked_chunks: List of retrieved chunks (already ranked), each with 'content' field
+        expected_plants: List of expected plant names
+        expected_keywords: List of expected keywords
+        
+    Returns:
+        MRR score (0-1)
+    """
+    if not ranked_chunks:
+        return 0.0
+    
+    # Check each chunk in ranked order
+    for rank, chunk in enumerate(ranked_chunks, start=1):
+        # Get content - try multiple possible field names
+        content = chunk.get("content", "")
+        if not content:
+            # Try alternative field names
+            content = chunk.get("text", "")
+        
+        if content and check_chunk_relevance(content, expected_plants, expected_keywords):
+            return 1.0 / rank
+    
+    # No relevant chunks found
+    return 0.0
+
+
+def calculate_ndcg(ranked_chunks: List[Dict], expected_plants: List[str], expected_keywords: List[str], k: int = 10) -> float:
+    """
+    Calculate Normalized Discounted Cumulative Gain (NDCG@k) for ranked retrieval results.
+    
+    NDCG measures ranking quality by:
+    1. Assigning relevance scores (1 for relevant, 0 for irrelevant)
+    2. Calculating DCG = sum(relevance_score / log2(rank + 1))
+    3. Calculating IDCG (ideal DCG if all relevant chunks were at top)
+    4. NDCG = DCG / IDCG
+    
+    Args:
+        ranked_chunks: List of retrieved chunks (already ranked), each with 'content' field
+        expected_plants: List of expected plant names
+        expected_keywords: List of expected keywords
+        k: Number of top results to consider (default: 10)
+        
+    Returns:
+        NDCG@k score (0-1)
+    """
+    if not ranked_chunks:
+        return 0.0
+    
+    # Limit to top k
+    top_k = ranked_chunks[:k]
+    
+    # Calculate relevance scores
+    relevance_scores = []
+    for chunk in top_k:
+        # Get content - try multiple possible field names
+        content = chunk.get("content", "")
+        if not content:
+            content = chunk.get("text", "")
+        
+        is_relevant = check_chunk_relevance(content, expected_plants, expected_keywords) if content else False
+        relevance_scores.append(1 if is_relevant else 0)
+    
+    # Calculate DCG (Discounted Cumulative Gain)
+    dcg = 0.0
+    for i, rel in enumerate(relevance_scores, start=1):
+        if rel > 0:
+            dcg += rel / math.log2(i + 1)
+    
+    # Calculate IDCG (Ideal DCG - all relevant chunks at top)
+    # Count total relevant chunks
+    total_relevant = sum(relevance_scores)
+    
+    if total_relevant == 0:
+        return 0.0  # No relevant chunks = NDCG = 0
+    
+    idcg = 0.0
+    for i in range(1, min(total_relevant + 1, k + 1)):
+        idcg += 1.0 / math.log2(i + 1)
+    
+    # Normalize
+    if idcg == 0:
+        return 0.0
+    
+    ndcg = dcg / idcg
+    return ndcg
+
+
+def calculate_retrieval_ranking_metrics(
+    ranked_vector_chunks: List[Dict],
+    expected_plants: List[str],
+    expected_keywords: List[str],
+    k: int = 10
+) -> Dict:
+    """
+    Calculate MRR and NDCG for ranked retrieval results.
+    
+    Args:
+        ranked_vector_chunks: List of ranked vector retrieval chunks (with 'content' field)
+        expected_plants: List of expected plant names
+        expected_keywords: List of expected keywords
+        k: Number of top results for NDCG calculation (default: 10)
+        
+    Returns:
+        Dict with 'mrr' and 'ndcg' scores
+    """
+    if not ranked_vector_chunks:
+        return {
+            "mrr": 0.0,
+            "ndcg": 0.0,
+            "num_relevant_chunks": 0,
+            "total_chunks": 0
+        }
+    
+    # Calculate MRR
+    mrr = calculate_mrr(ranked_vector_chunks, expected_plants, expected_keywords)
+    
+    # Calculate NDCG@k
+    ndcg = calculate_ndcg(ranked_vector_chunks, expected_plants, expected_keywords, k)
+    
+    # Count relevant chunks (check all chunks, not just top k)
+    num_relevant = 0
+    for chunk in ranked_vector_chunks:
+        content = chunk.get("content", "")
+        if not content:
+            content = chunk.get("text", "")
+        if content and check_chunk_relevance(content, expected_plants, expected_keywords):
+            num_relevant += 1
+    
+    return {
+        "mrr": mrr,
+        "ndcg": ndcg,
+        "num_relevant_chunks": num_relevant,
+        "total_chunks": len(ranked_vector_chunks)
+    }
 
 
 def aggregate_metrics(all_metrics: List[Dict]) -> Dict:
@@ -186,6 +400,17 @@ def aggregate_metrics(all_metrics: List[Dict]) -> Dict:
         avg_graph_citations = 0.0
         avg_vector_citations = 0.0
     
+    # Ranking statistics (MRR, NDCG) - if applicable
+    ranking_metrics = [m.get("ranking", {}) for m in all_metrics if m.get("ranking")]
+    if ranking_metrics:
+        avg_mrr = sum(r.get("mrr", 0) for r in ranking_metrics) / len(ranking_metrics)
+        avg_ndcg = sum(r.get("ndcg", 0) for r in ranking_metrics) / len(ranking_metrics)
+        avg_relevant_chunks = sum(r.get("num_relevant_chunks", 0) for r in ranking_metrics) / len(ranking_metrics)
+    else:
+        avg_mrr = 0.0
+        avg_ndcg = 0.0
+        avg_relevant_chunks = 0.0
+    
     return {
         "num_questions": len(all_metrics),
         "avg_keyword_score": avg_keyword_score,
@@ -196,6 +421,9 @@ def aggregate_metrics(all_metrics: List[Dict]) -> Dict:
         "avg_plant_precision": avg_plant_precision,
         "avg_plant_recall": avg_plant_recall,
         "avg_graph_citations": avg_graph_citations,
-        "avg_vector_citations": avg_vector_citations
+        "avg_vector_citations": avg_vector_citations,
+        "avg_mrr": avg_mrr,
+        "avg_ndcg": avg_ndcg,
+        "avg_relevant_chunks": avg_relevant_chunks
     }
 

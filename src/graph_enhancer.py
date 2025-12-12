@@ -176,15 +176,16 @@ class GraphEnhancer:
         entity_match_count = 0
         entity_match_details = []
         
-        # Check each entity type (plants weighted highest, then illnesses, then others)
+        # Check each entity type (plants weighted MUCH higher, then illnesses, then others)
+        # Increased plant weight significantly to improve plant precision
         entity_weights = {
-            "plants": 3.0,
-            "illnesses": 2.5,
-            "symptoms": 2.0,
-            "compounds": 1.5,
-            "properties": 1.5,
-            "local_names": 1.0,
-            "biological_names": 1.0
+            "plants": 10.0,  # Increased from 3.0 to heavily favor plant matches
+            "illnesses": 3.0,  # Increased from 2.5
+            "symptoms": 2.5,  # Increased from 2.0
+            "compounds": 2.0,  # Increased from 1.5
+            "properties": 2.0,  # Increased from 1.5
+            "local_names": 5.0,  # Increased significantly (these are plant names too)
+            "biological_names": 5.0  # Increased significantly (these are plant names too)
         }
         
         weighted_matches = 0.0
@@ -208,8 +209,19 @@ class GraphEnhancer:
             entity_boost = 0.0
         
         # Hybrid score: base_score_weight * base + (1 - base_score_weight) * entity_boost
-        # Graph-first: 35% base, 65% entity matches
-        hybrid_score = (base_score_weight * normalized_base) + ((1 - base_score_weight) * entity_boost)
+        # Graph-first with stronger plant emphasis: 25% base, 75% entity matches
+        # Reduced base weight to favor entity matches more (especially plants)
+        base_score_weight_adjusted = 0.25  # Reduced from 0.35 to 0.25
+        hybrid_score = (base_score_weight_adjusted * normalized_base) + ((1 - base_score_weight_adjusted) * entity_boost)
+        
+        # Extra boost if plant names match (double the plant contribution)
+        if graph_entities.get("plants"):
+            plant_match_boost = 0.0
+            for plant in graph_entities["plants"]:
+                pattern = r'\b' + re.escape(plant) + r'\b'
+                if re.search(pattern, content_lower):
+                    plant_match_boost += 0.1  # Additional boost per plant match
+            hybrid_score = min(hybrid_score + plant_match_boost, 1.0)  # Cap at 1.0
         
         # Store scoring details for debugging
         chunk["_scoring"] = {
@@ -218,7 +230,9 @@ class GraphEnhancer:
             "weighted_matches": weighted_matches,
             "entity_boost": entity_boost,
             "hybrid_score": hybrid_score,
-            "matched_entities": entity_match_details[:5]  # Store first 5 for debugging
+            "matched_entities": entity_match_details[:5],  # Store first 5 for debugging
+            "has_plant_match": any("plants:" in detail or "local_names:" in detail or "biological_names:" in detail 
+                                  for detail in entity_match_details)
         }
         
         return hybrid_score
@@ -261,11 +275,28 @@ class GraphEnhancer:
             else:
                 chunks_without_entities.append(chunk)
         
-        # Prefer chunks with entity matches, but include some without for diversity
-        # Strategy: Take all entity-matching chunks, then fill remainder with top non-matching
-        if chunks_with_entities:
-            filtered_chunks.extend(chunks_with_entities)
-            # Add top non-matching chunks if we haven't reached TOP_K
+        # STRICTER filtering: Prioritize chunks with plant matches, then other entity matches
+        # Separate plant-matching chunks from other entity-matching chunks
+        chunks_with_plant_matches = []
+        chunks_with_other_entity_matches = []
+        
+        for chunk in chunks_with_entities:
+            if chunk.get("_scoring", {}).get("has_plant_match", False):
+                chunks_with_plant_matches.append(chunk)
+            else:
+                chunks_with_other_entity_matches.append(chunk)
+        
+        # Prefer chunks with plant matches first, then other entity matches, then base ranking
+        if chunks_with_plant_matches:
+            filtered_chunks.extend(chunks_with_plant_matches)
+            remaining_slots = Config.TOP_K_WEAVIATE - len(filtered_chunks)
+            if remaining_slots > 0:
+                filtered_chunks.extend(chunks_with_other_entity_matches[:remaining_slots])
+            remaining_slots = Config.TOP_K_WEAVIATE - len(filtered_chunks)
+            if remaining_slots > 0:
+                filtered_chunks.extend(chunks_without_entities[:remaining_slots])
+        elif chunks_with_other_entity_matches:
+            filtered_chunks.extend(chunks_with_other_entity_matches)
             remaining_slots = Config.TOP_K_WEAVIATE - len(filtered_chunks)
             if remaining_slots > 0:
                 filtered_chunks.extend(chunks_without_entities[:remaining_slots])
@@ -284,11 +315,13 @@ class GraphEnhancer:
             top_score = final_results[0].get("_scoring", {}).get("hybrid_score", 0.0)
             logger.debug(f"[GraphEnhancer] Top reranked score: {top_score:.3f}")
         
-        # Clean up scoring metadata before returning (optional - remove if you want to keep for debugging)
+        # Store hybrid_score in the chunk for filtering/ranking (before removing _scoring)
         for chunk in final_results:
-            chunk.pop("_scoring", None)
-        
-        return final_results
+            if "_scoring" in chunk:
+                # Store hybrid_score for later use in citation filtering
+                chunk["hybrid_score"] = chunk["_scoring"].get("hybrid_score", chunk.get("score", 0.0))
+                # Keep _scoring for metrics calculation (MRR/NDCG)
+                # Don't remove it - needed for evaluation
     
     def _extract_graph_citations(self, graph_results: List[Dict]) -> List[Dict]:
         """Extract citation information from graph results. Returns top 4 citations."""
